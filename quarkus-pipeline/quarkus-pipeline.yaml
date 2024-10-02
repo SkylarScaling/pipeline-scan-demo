@@ -1,0 +1,145 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: build-pipeline
+  namespace: quarkus-pipeline
+spec:
+  params:
+    - name: gitUrl
+      type: string
+      description: The git repository URL to clone from.
+    - name: gitRevision
+      type: string
+      description: The git branch to clone.
+    - name: contextDir
+      description: the context directory from where to build the application
+      default: .
+    - name: imageGroup
+      description: Container image group
+    - name: imageName
+      description: Container image name
+    - name: baseImage
+      description: base image to run maven build and output image build
+      default: registry.access.redhat.com/ubi8/openjdk-11
+    - name: rhacs-api-config-secret-name
+      description: name of secret that contains ACS config
+      type: string
+    - name: image-registry-secret-name
+      description: name of secret that contains the image registry credentials
+      type: string
+    - name: deployment-location-in-git-repo
+      description: location of application Deployment CR in repo
+      type: string
+  workspaces:
+    - name: shared-workspace
+    - name: maven-settings
+  tasks:
+    # --------------------------
+    # Git Clone Task
+    # --------------------------
+    - name: git-clone
+      taskRef:
+        name: git-clone
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+      params:
+        - name: url
+          value: $(params.gitUrl)
+        - name: revision
+          value: $(params.gitRevision)
+        - name: deleteExisting
+          value: "true"
+    # --------------------------
+    # Build & Push Task
+    # --------------------------
+    - name: build-push-image
+      taskRef:
+        name: maven
+      runAfter:
+        - git-clone
+      params:
+        - name: image-registry-secret-name
+          value: $(params.image-registry-secret-name)
+        - name: MAVEN_IMAGE
+          value: $(params.baseImage)
+        - name: CONTEXT_DIR
+          value: $(params.contextDir)
+        - name: GOALS
+          value:
+            - -DskipTests=true
+            - -Dquarkus.jib.base-jvm-image=$(params.baseImage)
+            - -Dquarkus.container-image.insecure=true
+            - -Dquarkus.container-image.registry=quay.io
+            - -Dquarkus.container-image.build=true
+            - -Dquarkus.container-image.push=true
+            - -Dquarkus.container-image.additional-tags=latest
+            - -Dquarkus.container-image.group=$(params.imageGroup)
+            - -Dquarkus.container-image.name=$(params.imageName)
+            - package
+      workspaces:
+        - name: maven-settings
+          workspace: maven-settings
+        - name: source
+          workspace: shared-workspace
+    # --------------------------
+    # Deployment Check Task
+    # --------------------------
+    - name: acs-deployment-check
+      params:
+        - name: rhacs-api-config-secret-name
+          value: $(params.rhacs-api-config-secret-name)
+        - name: source_location
+          value: $(params.deployment-location-in-git-repo)
+      taskRef:
+        kind: Task
+        name: acs-deployment-check
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+      runAfter:
+        - build-push-image
+    # --------------------------
+    # Image Check Task
+    # --------------------------
+    - name: acs-image-check
+      params:
+        - name: rhacs-api-config-secret-name
+          value: $(params.rhacs-api-config-secret-name)
+        - name: image_location
+          value: quay.io/sscaling/quarkus-example:latest
+      taskRef:
+        kind: Task
+        name: acs-image-check
+      runAfter:
+        - build-push-image
+    # --------------------------
+    # Image Scan Task
+    # --------------------------
+    - name: acs-image-scan
+      params:
+        - name: rhacs-api-config-secret-name
+          value: $(params.rhacs-api-config-secret-name)
+        - name: image_location
+          value: quay.io/sscaling/quarkus-example:latest
+      taskRef:
+        kind: Task
+        name: acs-image-scan
+      runAfter:
+        - build-push-image
+    # --------------------------
+    # Deploy Task
+    # --------------------------
+    - name: deploy
+      taskRef:
+        name: deploy
+      runAfter:
+        - acs-deployment-check
+        - acs-image-check
+        - acs-image-scan
+      params:
+        - name: source_location
+          value: $(params.deployment-location-in-git-repo)
+      workspaces:
+        - name: source
+          workspace: shared-workspace

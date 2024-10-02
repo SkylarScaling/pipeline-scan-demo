@@ -1,0 +1,118 @@
+---
+- name: Setup Pipelines Example
+  gather_facts: false
+  hosts: localhost
+#  vars_prompt:
+#    # Prompt for cluster name
+#    - name: ocp_cluster_address
+#      prompt: Enter OCP Cluster hostname
+#      private: no
+#      confirm: no
+#    # Prompt for cluster-admin username
+#    - name: cluster_admin_user
+#      prompt: Enter cluster-admin user
+#      private: no
+#      confirm: no
+#    # Prompt for cluster-admin password
+#    - name: cluster_admin_password
+#      prompt: Enter cluster-admin password
+#      private: yes
+#      confirm: no
+#    # Prompt for registry username
+#    - name: registry_user
+#      prompt: Enter image registry username
+#      private: no
+#      confirm: no
+#    # Prompt for registry password
+#    - name: registry_password
+#      prompt: Enter image registry password
+#      private: yes
+#      confirm: no
+#    # Prompt for ACS API token
+#    - name: acs_api_token
+#      prompt: Enter ACS API token
+#      private: no
+#      confirm: no
+  tasks:
+    - name: "OpenShift CLI login"
+      shell: "oc login -u {{ cluster_admin_user }} -p {{ cluster_admin_password }} https://api.{{ ocp_cluster_address }}:443"
+
+    - name: Get ACS Central Route
+      kubernetes.core.k8s_info:
+        kind: Route
+        name: central
+        namespace: stackrox
+      register: central_route
+
+    - debug:
+        msg: "{{ central_route.resources[0].spec.host }}"
+
+    - set_fact:
+        acs_central_endpoint: "{{ central_route.resources[0].spec.host }}"
+
+    - name: Create ACS Secret
+      kubernetes.core.k8s:
+        definition:
+          kind: Secret
+          apiVersion: v1
+          type: Opaque
+          metadata:
+            name: acs-secret
+            namespace: quarkus-pipeline
+          data:
+            acs_api_token: "{{ acs_api_token | b64encode }}"
+            acs_central_endpoint: "{{ acs_central_endpoint | b64encode }}"
+
+    - name: Create Quay Secret
+      kubernetes.core.k8s:
+        definition:
+          kind: Secret
+          apiVersion: v1
+          type: Opaque
+          metadata:
+            name: quay-secret
+            namespace: quarkus-pipeline
+          data:
+            registry_user: "{{ registry_user | b64encode }}"
+            registry_pass: "{{ registry_password | b64encode }}"
+
+
+    - name: Create Pipeline Operator Subscription
+      kubernetes.core.k8s:
+        definition:
+          apiVersion: operators.coreos.com/v1alpha1
+          kind: Subscription
+          metadata:
+            name: openshift-pipelines-operator-rh
+            namespace: openshift-operators
+          spec:
+            channel: pipelines-1.15
+            installPlanApproval: Automatic
+            name: openshift-pipelines-operator-rh
+            source: redhat-operators
+            sourceNamespace: openshift-marketplace
+
+    - name: Wait for Required Resources to become available
+      kubernetes.core.k8s_info:
+        kind: CustomResourceDefinition
+        name: tasks.tekton.dev
+        wait: true
+        wait_condition:
+          reason: InitialNamesAccepted
+          type: Established
+        wait_sleep: 1
+
+    - name: Create Quarkus Pipeline Resources
+      kubernetes.core.k8s:
+        src: "quarkus-pipeline/{{ item }}"
+      loop:
+        - quarkus-pipeline-namespace.yaml
+        - quarkus-pvc.yaml
+        - quarkus-git-clone-task.yaml
+        - quarkus-maven-task.yaml
+        - quarkus-acs-deployment-check-task.yaml
+        - quarkus-acs-image-check-task.yaml
+        - quarkus-acs-image-scan-task.yaml
+        - quarkus-deploy-task.yaml
+        - quarkus-pipeline.yaml
+        - quarkus-pipelinerun.yaml

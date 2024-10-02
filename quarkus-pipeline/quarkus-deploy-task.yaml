@@ -1,0 +1,31 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: deploy
+  namespace: quarkus-pipeline
+spec:
+  params:
+    - name: source_location
+      description: Location of the file(s) to be scanned
+      type: string
+  steps:
+    - args:
+        - |
+          set -e -o
+          oc project quarkus-pipeline ;
+          oc delete deployment quarkus-example --wait=true --ignore-not-found=true ;
+          oc apply -f /files/$(params.source_location) ;
+          oc delete service quarkus-example --wait=true --ignore-not-found=true ;
+          oc expose deployment quarkus-example --port=8080 ;
+          oc delete route quarkus-example --wait=true --ignore-not-found=true ;
+          oc expose service quarkus-example ;
+          oc annotate route quarkus-example --overwrite=true "haproxy.router.openshift.io/hsts_header"="max-age=0" ;
+      command:
+        - /bin/sh
+        - '-c'
+      computeResources: {}
+      image: 'image-registry.openshift-image-registry.svc:5000/openshift/cli:latest'
+      name: deploy
+  workspaces:
+    - name: source
+      mountPath: /files

@@ -1,0 +1,37 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: build-pipeline-run-
+  namespace: quarkus-pipeline
+spec:
+  params:
+    - name: baseImage
+      value: registry.access.redhat.com/ubi9/openjdk-17
+    - name: rhacs-api-config-secret-name
+      value: acs-secret
+    - name: image-registry-secret-name
+      value: quay-secret
+    - name: deployment-location-in-git-repo
+      value: quarkus-deployment/quarkus-deployment.yaml
+    - name: contextDir
+      value: .
+    - name: gitRevision
+      value: main
+    - name: gitUrl
+      value: 'https://github.com/skylarscaling/quarkus-example-app.git'
+    - name: imageGroup
+      value: sscaling
+    - name: imageName
+      value: quarkus-example
+  pipelineRef:
+    name: build-pipeline
+  taskRunTemplate:
+    serviceAccountName: pipeline
+  timeouts:
+    pipeline: 1h0m0s
+  workspaces:
+    - name: shared-workspace
+      persistentVolumeClaim:
+        claimName: shared-workspace
+    - emptyDir: {}
+      name: maven-settings
