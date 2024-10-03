@@ -10,17 +10,19 @@ spec:
     - name: rhacs-api-config-secret-name
       value: acs-secret
     - name: image-registry-secret-name
-      value: quay-secret
+      value: ir-secret
     - name: deployment-location-in-git-repo
       value: quarkus-deployment/quarkus-deployment.yaml
     - name: contextDir
       value: .
     - name: gitRevision
-      value: main
+      value: "{{ git_branch }}"
     - name: gitUrl
       value: 'https://github.com/skylarscaling/quarkus-example-app.git'
+    - name: imageRegistry
+      value: "{{ registry_host }}"
     - name: imageGroup
-      value: sscaling
+      value: quarkus-pipeline
     - name: imageName
       value: quarkus-example
   pipelineRef:

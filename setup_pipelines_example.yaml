@@ -63,19 +63,28 @@
             acs_api_token: "{{ acs_api_token | b64encode }}"
             acs_central_endpoint: "{{ acs_central_endpoint | b64encode }}"
 
-    - name: Create Quay Secret
+    - name: "Get Account Token"
+      shell: "oc whoami --show-token"
+      register: token_request
+
+    - set_fact:
+        ca_token: "{{ token_request.stdout }}"
+
+    - debug:
+        msg: "{{ ca_token }}"
+
+    - name: Create Internal Registry Secret
       kubernetes.core.k8s:
         definition:
           kind: Secret
           apiVersion: v1
           type: Opaque
           metadata:
-            name: quay-secret
+            name: ir-secret
             namespace: quarkus-pipeline
           data:
-            registry_user: "{{ registry_user | b64encode }}"
-            registry_pass: "{{ registry_password | b64encode }}"
-
+            registry_user: "{{ cluster_admin_user | b64encode }}"
+            registry_pass: "{{ ca_token | b64encode }}"
 
     - name: Create Pipeline Operator Subscription
       kubernetes.core.k8s:
@@ -102,6 +111,26 @@
           type: Established
         wait_sleep: 1
 
+    - name: Enable Internal Image Registry Default Route
+      kubernetes.core.k8s:
+        definition:
+          apiVersion: imageregistry.operator.openshift.io/v1
+          kind: Config
+          metadata:
+            name: cluster
+          spec:
+            defaultRoute: true
+
+    - name: Get default-route
+      kubernetes.core.k8s_info:
+        kind: Route
+        name: default-route
+        namespace: openshift-image-registry
+      register: default_route
+
+    - debug:
+        msg: "{{ default_route.resources[0].spec.host }}"
+
     - name: Create Quarkus Pipeline Resources
       kubernetes.core.k8s:
         src: "quarkus-pipeline/{{ item }}"
@@ -115,4 +144,24 @@
         - quarkus-acs-image-scan-task.yaml
         - quarkus-deploy-task.yaml
         - quarkus-pipeline.yaml
-        - quarkus-pipelinerun.yaml
+
+    - name: Create temporary directory for template files
+      tempfile:
+        state: directory
+        suffix: tmp
+      register: tmp_dir
+
+    - set_fact:
+        working_dir: "{{ tmp_dir.path }}"
+        registry_host: "{{ default_route.resources[0].spec.host }}"
+        git_branch: internal-registry
+
+    - name: Populate Templates
+      template:
+        src: "quarkus-pipeline/templates/quarkus-pipelinerun.yaml.j2"
+        dest: "{{ working_dir }}/quarkus-pipelinerun.yaml"
+
+    - name: Create PipelineRun
+      kubernetes.core.k8s:
+        src: "{{ working_dir }}/quarkus-pipelinerun.yaml"
+        state: present
