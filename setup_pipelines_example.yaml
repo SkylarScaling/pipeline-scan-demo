@@ -50,6 +50,12 @@
     - set_fact:
         acs_central_endpoint: "{{ central_route.resources[0].spec.host }}"
 
+    - name: Create Quarkus Pipeline Resources
+      kubernetes.core.k8s:
+        src: "quarkus-pipeline/{{ item }}"
+      loop:
+        - quarkus-pipeline-namespace.yaml
+
     - name: Create ACS Secret
       kubernetes.core.k8s:
         definition:
@@ -135,7 +141,6 @@
       kubernetes.core.k8s:
         src: "quarkus-pipeline/{{ item }}"
       loop:
-        - quarkus-pipeline-namespace.yaml
         - quarkus-pvc.yaml
         - quarkus-git-clone-task.yaml
         - quarkus-maven-task.yaml
