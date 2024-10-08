@@ -18,16 +18,6 @@
 #      prompt: Enter cluster-admin password
 #      private: yes
 #      confirm: no
-#    # Prompt for registry username
-#    - name: registry_user
-#      prompt: Enter image registry username
-#      private: no
-#      confirm: no
-#    # Prompt for registry password
-#    - name: registry_password
-#      prompt: Enter image registry password
-#      private: yes
-#      confirm: no
 #    # Prompt for ACS API token
 #    - name: acs_api_token
 #      prompt: Enter ACS API token
