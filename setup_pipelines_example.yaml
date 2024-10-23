@@ -24,8 +24,8 @@
 #      private: no
 #      confirm: no
   tasks:
-    - name: "OpenShift CLI login"
-      shell: "oc login -u {{ cluster_admin_user }} -p {{ cluster_admin_password }} https://api.{{ ocp_cluster_address }}:443"
+    - name: "OpenShift Central Cluster CLI login"
+      shell: "oc login -u {{ cluster_admin_user }} -p {{ cluster_admin_password }} https://api.{{ acs_central_cluster_address }}:443"
 
     - name: Get ACS Central Route
       kubernetes.core.k8s_info:
@@ -39,6 +39,9 @@
 
     - set_fact:
         acs_central_endpoint: "{{ central_route.resources[0].spec.host }}"
+
+    - name: "OpenShift Target Cluster CLI login"
+      shell: "oc login -u {{ cluster_admin_user }} -p {{ cluster_admin_password }} https://api.{{ ocp_cluster_address }}:443"
 
     - name: Create Quarkus Pipeline Resources
       kubernetes.core.k8s:
