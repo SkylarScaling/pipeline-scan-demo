@@ -14,6 +14,8 @@ spec:
     - name: contextDir
       description: the context directory from where to build the application
       default: .
+    - name: imageRegistry
+      description: Container image registry host
     - name: imageGroup
       description: Container image group
     - name: imageName
@@ -70,7 +72,7 @@ spec:
             - -DskipTests=true
             - -Dquarkus.jib.base-jvm-image=$(params.baseImage)
             - -Dquarkus.container-image.insecure=true
-            - -Dquarkus.container-image.registry=quay.io
+            - -Dquarkus.container-image.registry=$(params.imageRegistry)
             - -Dquarkus.container-image.build=true
             - -Dquarkus.container-image.push=true
             - -Dquarkus.container-image.additional-tags=latest

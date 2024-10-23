@@ -2,40 +2,50 @@
 - name: Setup Pipelines Example
   gather_facts: false
   hosts: localhost
-#  vars_prompt:
-#    # Prompt for cluster name
-#    - name: ocp_cluster_address
-#      prompt: Enter OCP Cluster hostname
-#      private: no
-#      confirm: no
-#    # Prompt for cluster-admin username
-#    - name: cluster_admin_user
-#      prompt: Enter cluster-admin user
-#      private: no
-#      confirm: no
-#    # Prompt for cluster-admin password
-#    - name: cluster_admin_password
-#      prompt: Enter cluster-admin password
-#      private: yes
-#      confirm: no
-#    # Prompt for registry username
-#    - name: registry_user
-#      prompt: Enter image registry username
-#      private: no
-#      confirm: no
-#    # Prompt for registry password
-#    - name: registry_password
-#      prompt: Enter image registry password
-#      private: yes
-#      confirm: no
-#    # Prompt for ACS API token
-#    - name: acs_api_token
-#      prompt: Enter ACS API token
-#      private: no
-#      confirm: no
+  #  vars_prompt:
+  #    # Prompt for cluster name
+  #    - name: ocp_cluster_address
+  #      prompt: Enter OCP Cluster hostname
+  #      private: no
+  #      confirm: no
+  #    # Prompt for cluster-admin username
+  #    - name: cluster_admin_user
+  #      prompt: Enter cluster-admin user
+  #      private: no
+  #      confirm: no
+  #    # Prompt for cluster-admin password
+  #    - name: cluster_admin_password
+  #      prompt: Enter cluster-admin password
+  #      private: yes
+  #      confirm: no
+  #    # Prompt for image group
+  #    - name: image_group
+  #      prompt: Enter image group for application
+  #      private: no
+  #      confirm: no
+  #    # Prompt for registry host
+  #    - name: registry_host
+  #      prompt: Enter image registry hostname
+  #      private: no
+  #      confirm: no
+  #    # Prompt for registry username
+  #    - name: registry_user
+  #      prompt: Enter image registry username
+  #      private: no
+  #      confirm: no
+  #    # Prompt for registry password
+  #    - name: registry_password
+  #      prompt: Enter image registry password
+  #      private: yes
+  #      confirm: no
+  #    # Prompt for ACS API token
+  #    - name: acs_api_token
+  #      prompt: Enter ACS API token
+  #      private: no
+  #      confirm: no
   tasks:
-    - name: "OpenShift CLI login"
-      shell: "oc login -u {{ cluster_admin_user }} -p {{ cluster_admin_password }} https://api.{{ ocp_cluster_address }}:443"
+    - name: "OpenShift Central Cluster CLI login"
+      shell: "oc login -u {{ cluster_admin_user }} -p {{ cluster_admin_password }} https://api.{{ acs_central_cluster_address }}:443"
 
     - name: Get ACS Central Route
       kubernetes.core.k8s_info:
@@ -49,6 +59,9 @@
 
     - set_fact:
         acs_central_endpoint: "{{ central_route.resources[0].spec.host }}"
+
+    - name: "OpenShift Target Cluster CLI login"
+      shell: "oc login -u {{ cluster_admin_user }} -p {{ cluster_admin_password }} https://api.{{ ocp_cluster_address }}:443"
 
     - name: Create Quarkus Pipeline Resources
       kubernetes.core.k8s:
@@ -120,4 +133,23 @@
         - quarkus-acs-image-scan-task.yaml
         - quarkus-deploy-task.yaml
         - quarkus-pipeline.yaml
-        - quarkus-pipelinerun.yaml
+
+    - name: Create temporary directory for template files
+      tempfile:
+        state: directory
+        suffix: tmp
+      register: tmp_dir
+
+    - set_fact:
+        working_dir: "{{ tmp_dir.path }}"
+        git_branch: main
+
+    - name: Populate Templates
+      template:
+        src: "quarkus-pipeline/templates/quarkus-pipelinerun.yaml.j2"
+        dest: "{{ working_dir }}/quarkus-pipelinerun.yaml"
+
+    - name: Create PipelineRun
+      kubernetes.core.k8s:
+        src: "{{ working_dir }}/quarkus-pipelinerun.yaml"
+        state: present
