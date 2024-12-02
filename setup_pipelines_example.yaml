@@ -45,7 +45,7 @@
   #      confirm: no
   tasks:
     - name: "OpenShift Central Cluster CLI login"
-      shell: "oc login -u {{ cluster_admin_user }} -p {{ cluster_admin_password }} https://api.{{ acs_central_cluster_address }}:443"
+      shell: "oc login -u {{ cluster_admin_user }} -p {{ hub_cluster_admin_password }} https://api.{{ acs_central_cluster_address }}:443"
 
     - name: Get ACS Central Route
       kubernetes.core.k8s_info:
